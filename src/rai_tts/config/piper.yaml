@@ -1,0 +1,6 @@
+tts_node:
+  ros__parameters:
+    tts_client: piper
+    voice: en_GB-northern_english_male-medium.onnx
+    base_url: ""
+    topic: to_human

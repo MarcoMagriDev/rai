@@ -24,7 +24,7 @@ import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
 
-from .tts_clients import ElevenLabsClient, OpenTTSClient, TTSClient
+from .tts_clients import ElevenLabsClient, OpenTTSClient, PiperTTSClient, TTSClient
 
 
 class TTSJob(NamedTuple):
@@ -120,6 +120,11 @@ class TTSNode(Node):
             )
         elif tts_client_param == "elevenlabs":
             return ElevenLabsClient(
+                voice=voice_param,
+                base_url=base_url_param,
+            )
+        elif tts_client_param == "piper":
+            return PiperTTSClient(
                 voice=voice_param,
                 base_url=base_url_param,
             )

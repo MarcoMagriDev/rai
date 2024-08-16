@@ -16,10 +16,13 @@
 import os
 import tempfile
 from abc import abstractmethod
-from typing import Optional
+from typing import Optional, Tuple
+import wave
 
 import requests
 from elevenlabs.client import ElevenLabs
+from piper.voice import PiperVoice
+from piper.download import ensure_voice_exists, get_voices, find_voice
 
 
 class TTSClient:
@@ -33,6 +36,15 @@ class TTSClient:
             delete=False, suffix=suffix
         ) as temp_audio_file:
             temp_audio_file.write(audio_data)
+            temp_file_path = temp_audio_file.name
+
+        return temp_file_path
+
+    @staticmethod
+    def get_temp_file(suffix: str) -> str:
+        with tempfile.NamedTemporaryFile(
+            delete=False, suffix=suffix
+        ) as temp_audio_file:
             temp_file_path = temp_audio_file.name
 
         return temp_file_path
@@ -69,3 +81,40 @@ class OpenTTSClient(TTSClient):
         response.raise_for_status()
 
         return self.save_audio_to_file(response.content, suffix=".wav")
+
+
+class PiperTTSClient(TTSClient):
+    def __init__(
+        self,
+        voice: str,
+        base_url: Optional[str] = None,
+        use_cuda: Optional[bool] = False,
+    ):
+        self.base_url = base_url
+        self.voice = voice
+        self.client = PiperVoice.load(*self.get_voice_model(voice), use_cuda=use_cuda)
+
+    def get_voice_model(self, voice: str) -> Tuple[str, Optional[str]]:
+        try:
+            data_dir = os.environ["PIPER_DATA_DIR"]
+        except KeyError:
+            data_dir = os.getcwd()
+
+        model = os.path.join(data_dir, voice)
+        if os.path.exists(model):
+            return model, None
+
+        voices_info = get_voices(data_dir)
+        aliases_info = {}
+        for voice_info in voices_info.values():
+            for voice_alias in voice_info.get("aliases", []):
+                aliases_info[voice_alias] = {"_is_alias": True, **voice_info}
+
+        voices_info.update(aliases_info)
+        ensure_voice_exists(model, data_dir, data_dir, voices_info)
+        return find_voice(model, data_dir)
+
+    def synthesize_speech_to_file(self, text: str) -> str:
+        temp_file_name = self.get_temp_file(".wav")
+        self.client.synthesize(text, wave.Wave_write(temp_file_name))
+        return temp_file_name
