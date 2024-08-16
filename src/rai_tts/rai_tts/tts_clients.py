@@ -95,11 +95,7 @@ class PiperTTSClient(TTSClient):
         self.client = PiperVoice.load(*self.get_voice_model(voice), use_cuda=use_cuda)
 
     def get_voice_model(self, voice: str) -> Tuple[str, Optional[str]]:
-        try:
-            data_dir = os.environ["PIPER_DATA_DIR"]
-        except KeyError:
-            data_dir = os.getcwd()
-
+        data_dir = os.environ.get("PIPER_MODELS_PATH", os.getcwd())
         model = os.path.join(data_dir, voice)
         if os.path.exists(model):
             return model, None
