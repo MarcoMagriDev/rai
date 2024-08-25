@@ -26,3 +26,8 @@ rai_tts_node:
     default_value: "to_human",
     description: "TODO: add description here",
   }
+  device_indexes: {
+    type: int_array,
+    default_value: [],
+    description: "TODO: add description here",
+  }

@@ -66,6 +66,7 @@ class TTSNode(Node):
         self.get_logger().info(  # type: ignore
             f"Registering new TTS job: {self.job_id} length: {len(msg.data)} chars."  # type: ignore
         )
+        self.params = self.param_listener.get_params()
         threading.Thread(
             target=self.synthesize_speech, args=(self.job_id, msg.data), daemon=True  # type: ignore
         ).start()
@@ -93,7 +94,7 @@ class TTSNode(Node):
             return
 
         self.get_logger().info(f"Job {id} completed.")  # type: ignore
-        tts_job = TTSJob(id, text, temp_file_path, device_indexes)
+        tts_job = TTSJob(id, text, temp_file_path, self.params.device_indexes)
         self.audio_player.add_job(tts_job)
         return temp_file_path
 
