@@ -171,3 +171,5 @@ logs/
 !examples/imgs/*.md
 
 src/examples/*-demo
+
+*_parameters.py

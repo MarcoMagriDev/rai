@@ -1,0 +1,28 @@
+rai_tts_node:
+  tts_client: {
+    type: string,
+    default_value: "opentts",
+    read_only: true,
+    description: "TODO: add description here",
+    validation: {
+      one_of<>: [["opentts", "elevenlabs"]],
+    }
+  }
+  voice: {
+    type: string,
+    read_only: true,
+    default_value: "larynx:blizzard_lessac-glow_tts",
+    description: "TODO: add description here",
+  }
+  base_url: {
+    type: string,
+    read_only: true,
+    default_value: "http://localhost:5500/api/tts",
+    description: "TODO: add description here",
+  }
+  topic: {
+    type: string,
+    read_only: true,
+    default_value: "to_human",
+    description: "TODO: add description here",
+  }

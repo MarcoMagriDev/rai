@@ -20,6 +20,13 @@ from setuptools import find_packages, setup
 
 package_name = "rai_tts"
 
+from generate_parameter_library_py.setup_helper import generate_parameter_module
+
+generate_parameter_module(
+    "rai_tts_parameters",  # python module name for parameter library
+    "rai_tts/rai_tts_parameters.yaml",  # path to input yaml file
+)
+
 setup(
     name=package_name,
     version="0.1.0",

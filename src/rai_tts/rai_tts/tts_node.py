@@ -25,6 +25,7 @@ from rclpy.node import Node
 from std_msgs.msg import String
 
 from .tts_clients import ElevenLabsClient, OpenTTSClient, TTSClient
+from .rai_tts_parameters import rai_tts_node as rai_tts_parameters
 
 
 class TTSJob(NamedTuple):
@@ -35,16 +36,11 @@ class TTSJob(NamedTuple):
 class TTSNode(Node):
     def __init__(self):
         super().__init__("rai_tts_node")
-
-        self.declare_parameter("tts_client", "opentts")
-        self.declare_parameter("voice", "larynx:blizzard_lessac-glow_tts")
-        self.declare_parameter("base_url", "http://localhost:5500/api/tts")
-        self.declare_parameter("topic", "to_human")
-
-        topic_param = self.get_parameter("topic").get_parameter_value().string_value  # type: ignore
+        self.param_listener = rai_tts_parameters.ParamListener(self)
+        self.params = self.param_listener.get_params()
 
         self.subscription = self.create_subscription(  # type: ignore
-            String, topic_param, self.listener_callback, 10  # type: ignore
+            String, self.params.topic, self.listener_callback, 10  # type: ignore
         )
         self.playing = False
         self.status_publisher = self.create_publisher(String, "tts_status", 10)  # type: ignore
@@ -109,22 +105,18 @@ class TTSNode(Node):
         self.playing = False
 
     def _initialize_client(self) -> TTSClient:
-        tts_client_param = cast(str, self.get_parameter("tts_client").get_parameter_value().string_value)  # type: ignore
-        voice_param = cast(str, self.get_parameter("voice").get_parameter_value().string_value)  # type: ignore
-        base_url_param = cast(str, self.get_parameter("base_url").get_parameter_value().string_value)  # type: ignore
-
-        if tts_client_param == "opentts":
+        if self.params.tts_client == "opentts":
             return OpenTTSClient(
-                base_url=base_url_param,
-                voice=voice_param,
+                base_url=self.params.base_url,
+                voice=self.params.voice,
             )
-        elif tts_client_param == "elevenlabs":
+        elif self.params.tts_client == "elevenlabs":
             return ElevenLabsClient(
-                voice=voice_param,
-                base_url=base_url_param,
+                base_url=self.params.base_url,
+                voice=self.params.voice,
             )
         else:
-            raise ValueError(f"Unknown TTS client: {tts_client_param}")
+            raise ValueError(f"Unknown TTS client: {self.params.tts_client}")
 
     def _preprocess_text(self, text: str) -> str:
         """Remove emojis from text."""
