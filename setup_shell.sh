@@ -10,3 +10,5 @@
 
 export PYTHONPATH
 PYTHONPATH="$(dirname "$(dirname "$(poetry run which python)")")/lib/python$(poetry run python --version | awk '{print $2}' | cut -d. -f1,2)/site-packages:$PYTHONPATH"
+
+export RCUTILS_COLORIZED_OUTPUT=1

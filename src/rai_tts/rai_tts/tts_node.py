@@ -14,23 +14,24 @@
 #
 
 import re
-import subprocess
 import threading
 import time
-from queue import PriorityQueue
-from typing import NamedTuple, cast
+from typing import cast
 
 import rclpy
 from rclpy.node import Node
 from std_msgs.msg import String
+from std_srvs.srv import Trigger
 
 from .tts_clients import ElevenLabsClient, OpenTTSClient, TTSClient
 from .rai_tts_parameters import rai_tts_node as rai_tts_parameters
 
-
-class TTSJob(NamedTuple):
-    id: int
-    file_path: str
+from .tts_audio_players import (
+    TTSJob,
+    AudioPlayer,
+    FFPlayAudioPlayer,
+    SoundDeviceAudioPlayer,
+)
 
 
 class TTSNode(Node):
@@ -42,18 +43,20 @@ class TTSNode(Node):
         self.subscription = self.create_subscription(  # type: ignore
             String, self.params.topic, self.listener_callback, 10  # type: ignore
         )
-        self.playing = False
         self.status_publisher = self.create_publisher(String, "tts_status", 10)  # type: ignore
-        self.queue: PriorityQueue[TTSJob] = PriorityQueue()
-        self.it: int = 0
         self.job_id: int = 0
+        self.device_indexes = None
         self.tts_client = self._initialize_client()
         self.create_timer(0.01, self.status_callback)
-        threading.Thread(target=self._process_queue).start()
+
+        self.audio_player = AudioPlayer(FFPlayAudioPlayer(), self.get_logger())
+        self.cancel_speaking_service = self.create_service(
+            Trigger, "cancel_speaking", self.cancel_speaking_callback
+        )
         self.get_logger().info("TTS Node has been started")  # type: ignore
 
     def status_callback(self):
-        if self.queue.empty() and self.playing is False:
+        if self.audio_player.active:
             self.status_publisher.publish(String(data="waiting"))
         else:
             self.status_publisher.publish(String(data="playing"))
@@ -64,7 +67,7 @@ class TTSNode(Node):
             f"Registering new TTS job: {self.job_id} length: {len(msg.data)} chars."  # type: ignore
         )
         threading.Thread(
-            target=self.synthesize_speech, args=(self.job_id, msg.data)  # type: ignore
+            target=self.synthesize_speech, args=(self.job_id, msg.data), daemon=True  # type: ignore
         ).start()
         self.job_id += 1
 
@@ -76,33 +79,23 @@ class TTSNode(Node):
         text = self._preprocess_text(text)
         if id > 0:
             time.sleep(0.5)
-        temp_file_path = self.tts_client.synthesize_speech_to_file(text)
+
+        tries = 0
+        while tries < 2:
+            try:
+                temp_file_path = self.tts_client.synthesize_speech_to_file(text)
+                break
+            except Exception as e:
+                self.get_logger().warn(f"Error ocurred during synthesizing speech: {e}.")  # type: ignore
+                tries += 1
+        else:
+            self.get_logger().error(f"Error ocurred during synthesizing speech. Unable to proceed.")  # type: ignore
+            return
+
         self.get_logger().info(f"Job {id} completed.")  # type: ignore
-        tts_job = TTSJob(id, temp_file_path)
-        self.queue.put(tts_job)
-
+        tts_job = TTSJob(id, text, temp_file_path, device_indexes)
+        self.audio_player.add_job(tts_job)
         return temp_file_path
-
-    def _process_queue(self):
-        while rclpy.ok():
-            time.sleep(0.01)
-            if not self.queue.empty():
-                if self.queue.queue[0][0] == self.it:
-                    self.it += 1
-                    tts_job = self.queue.get()
-                    self.get_logger().info(  # type: ignore
-                        f"Playing audio for job {tts_job.id}. {tts_job.file_path}"
-                    )
-                    self._play_audio(tts_job.file_path)
-
-    def _play_audio(self, filepath: str):
-        subprocess.run(
-            ["ffplay", "-v", "0", "-nodisp", "-autoexit", filepath],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-        )
-        self.get_logger().debug(f"Playing audio: {filepath}")  # type: ignore
-        self.playing = False
 
     def _initialize_client(self) -> TTSClient:
         if self.params.tts_client == "opentts":
@@ -131,6 +124,20 @@ class TTSNode(Node):
         )
         text = emoji_pattern.sub(r"", text)
         return text
+
+    def cancel_speaking_callback(
+        self, request: Trigger.Request, response: Trigger.Response
+    ):
+        if not self.audio_player.active:
+            response.success = True
+            response.message = "No speech in progress. Nothing to cancel."
+            return response
+
+        response.success = self.audio_player.cancel()
+        response.message = (
+            "Speech cancelled." if response.success else "Unable to cancel speech."
+        )
+        return response
 
 
 def main():
